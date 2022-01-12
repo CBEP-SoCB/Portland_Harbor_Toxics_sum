@@ -39,7 +39,7 @@ Original_Data/DATA_SOURCES.html
 # Folders used to hide content from GIT
 **/Methods/
 **/Drafts/
-
+**/omitfromgit/
 
 # Non-essential ArcGIS File
 **/GIS_Files.idb/
