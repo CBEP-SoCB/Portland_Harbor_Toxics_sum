@@ -1,0 +1,546 @@
+---
+title: "Producing Graphics For Portland Sediment Toxicity Data"
+author: "Curtis C. Bohlen, Casco Bay Estuary Partnership"
+date: "4/01/2021"
+output:
+  github_document:
+    toc: true
+    fig_width: 7
+    fig_height: 5
+---
+
+<img
+  src="https://www.cascobayestuary.org/wp-content/uploads/2014/04/logo_sm.jpg"
+  style="position:absolute;top:10px;right:50px;" />
+
+# Strategy
+Overall, we want a visually simple graphic that captures the most important aspects of contamination in Portland Harbor.  From other analyses, we know that 
+1.  Metals levels are consistently below screening levels.
+2.  Most pesticide residues were never or almost never detected, the only exceptions being the DDT residues.
+3.  Other contaminants exceed screening levels at about half of sampling locations.
+4.  Levels of contaminants are highly correlated.
+
+Multiple contaminants with complicated names can make for intimidating graphic.  We need to identify ways to simplify the data display without distorting the meaning.  Screening levels are available for Total PAHs, Total PCBs, and sum of DDT residues, suggesting we can focus on those three aggregate indicators of contamination and simplify the presentation.  There is no equivalent way of simplifying display of the metals data, but all metals are below levels of concern.
+
+The data is complicated by the presence of many non-detects.  Here, we handle non-detects by replacing them with a maximum likelihood estimator of the expected value of non-detects based on an (assumed) lognormal distribution.  See CBEP's LCensMeans Package for details.
+
+Here we consider both and 'J' flags to be "non-detects' as both are below the reporting limits.  A more sophisticated analysis, with more data might model 'J' and 'U' flags differently, but here we combine them.
+
+## Special Considerations
+1.  Reporting limits for organic contaminants from sample CSP-8 were exceptionally high.  For PCBs the reporting limit was sufficiently high to bias any approach to estimating PCB loads, so we delete this point from consideration
+2. DDT concentrations from Sample CSS-15 were replicates that failed a QA/QC check.  One was a non-detect, while the other was roughly double the reporting limit.  Here we report results based on averaging imputed values of the non-detect with the observed value from the other sample.
+
+# Install Libraries
+```{r libraries}
+library(readxl)
+library(tidyverse)
+library(ggthemes)
+library(GGally)
+library(maxLik)
+
+library(CBEPgraphics)
+load_cbep_fonts()
+theme_set(theme_cbep())
+
+library(LCensMeans)
+```
+
+# Assemble Data
+## Create Site Data
+```{r site_data}
+sitename <-  c("East End Beach", "Amethyst Lot",
+               "Maine State Pier/Ocean Gateway", "Maine Wharf",
+               "Portland Pier", "Chandler's Wharf",
+               "Union Wharf", "Union Wharf", "Wright Wharf",
+               "Holyoke Wharf", "Deake's Wharf",
+               "Portland Yacht Services", "Ricker's Wharf",
+               "South Port Marina", "Aspasia/Sunset Marina",
+               "Port Harbor/ Breakwater Marina")
+SAMPLE_ID <- c('CSP-1', 'CSP-2', 'CSP-3', 'CSP-4', 'CSP-5',
+                'CSP-6', 'CSP-7', 'CSP-7D', 'CSP-8', 'CSP-9',
+                'CSP-10', 'CSP-11', 'CSP-12', 'CSS-13', 'CSP-14',
+                'CSS-15')
+
+site_info <- tibble(SAMPLE_ID,sitename)
+rm(SAMPLE_ID, sitename)
+```
+
+## Folder References
+```{r folders}
+sibfldnm <- 'Original_Data'
+niecefldnm <- 'Final_Data_Transmittal'
+parent <- dirname(getwd())
+niece = file.path(parent,sibfldnm, niecefldnm)
+
+dir.create(file.path(getwd(), 'figures'), showWarnings = FALSE)
+```
+
+## List of Names of Parameters
+We need lists of names of parameters is specific categories to facilitate later
+sums, totals, and graphics.  The Parameters are grouped in categories in the 
+secondary tables in the source Excel data.
+```{r parameter_names}
+fn <- "draft_Combined_data_20190917.xls"
+
+sed_names <- c('% COARSE SAND', '% FINE SAND', '% MEDIUM SAND',
+                'FINES', 'GRAVEL', 'MOISTURE', 'SOLIDS, TOTAL',
+                'TOTAL ORGANIC CARBON (REP1)', 'TOTAL ORGANIC CARBON (REP2)')
+
+metal_names <- read_excel(paste(niece,fn, sep='/'),
+                           sheet = "Metals", skip = 3) %>%
+  select(1) %>%
+  slice(1:8) %>%
+  mutate(PARAMETER_NAME = substr(PARAMETER_NAME, 1, nchar(PARAMETER_NAME)-7))
+metal_names <- metal_names$PARAMETER_NAME
+
+pah_names <- read_excel(paste(niece,fn, sep='/'),
+                        sheet = "PAHs", skip = 3) %>%
+  select(1) %>%
+  slice(1:16)
+pah_names <- pah_names$PARAMETER_NAME
+
+pcb_names <- read_excel(paste(niece,fn, sep='/'),
+                        sheet = "PCBs", skip = 3) %>%
+  select(1) %>%
+  slice(1:22) #%>%
+pcb_names <- pcb_names$PARAMETER_NAME
+
+pesticide_names <- read_excel(paste(niece,fn, sep='/'),
+                               sheet = "Pesticides", skip = 3) %>%
+  select(1) %>%
+  slice(1:8)
+pesticide_names <- pesticide_names$PARAMETER_NAME
+
+(parmnames = c(sed_names, metal_names, pah_names, pcb_names, pesticide_names))
+
+```
+
+## Load Core Data
+```{r load_data}
+fn <- "draft_Combined_data_20190917.xls"
+
+the_data <- read_excel(paste(niece,fn, sep='/'), 
+    sheet = "Combined", col_types = c("skip", 
+        "text", "skip", "skip", "skip", 
+        "skip", "skip", "skip", "skip", 
+        "text", "text", "numeric", "text", 
+        "numeric", "text", "numeric", "numeric", 
+        "text", "text", "text", "skip", 
+        "skip", "skip", "skip", "skip", 
+        "numeric", "numeric", "skip", "skip", 
+        "skip", "skip", "skip", "skip", 
+        "skip")) %>%
+  mutate(SAMPLE_ID = factor(SAMPLE_ID, levels = c("CSP-1", "CSP-2", "CSP-3",
+                                                  "CSP-4", "CSP-5", "CSP-6",
+                                                  "CSP-7", "CSP-7D", "CSP-8",
+                                                  "CSP-9", "CSP-10", "CSP-11",
+                                                  "CSP-12", "CSS-13", "CSP-14",
+                                                  "CSS-15"))) %>%
+  # Remove ', TOTAL' from the end of the names of metals
+  mutate(PARAMETER_NAME = 
+           ifelse(substr(PARAMETER_NAME, nchar(PARAMETER_NAME)-6,
+                          nchar(PARAMETER_NAME)) == ', TOTAL',
+                  substr(PARAMETER_NAME, 1, nchar(PARAMETER_NAME)-7),
+                  PARAMETER_NAME))
+```
+
+## Assemble Data in CBEP Preferred Form
+We filter data to eliminate QA/QC samples, then combine Reporting Limits and
+Observed Concentrations into data on concentrations. We then add a flag
+indicating which are censored values.  Finally, we group data into groups, and
+use the groups.
+```{r format_data_for_nd}
+sed_data_long <- the_data %>% 
+  filter (the_data$PARAMETER_NAME %in% parmnames) %>%
+  filter(is.na(`%_RECOVERY`)) %>%
+  filter(SAMPLE_ID != 'QC') %>%
+  mutate(CONCENTRATION = ifelse(is.na(CONCENTRATION) &
+                                  LAB_QUALIFIER %in% c('U', 'J'),
+                                REPORTING_LIMIT,
+                                CONCENTRATION)) %>%
+  group_by(SAMPLE_ID, PARAMETER_NAME) %>%
+  summarize(CONCENTRATION = mean(CONCENTRATION, na.rm=TRUE),
+            samples = n(),
+            censored = sum(LAB_QUALIFIER=='U', na.rm=TRUE)) %>%
+  ungroup() %>%
+  rename(Contaminant = PARAMETER_NAME) %>%
+  mutate(Contaminant = factor(Contaminant)) %>%
+  
+  #Create group variable to facilitate subsetting.
+  mutate(cgroup = ifelse(Contaminant %in% sed_names,1,
+                   ifelse(Contaminant %in% metal_names,2,
+                      ifelse(Contaminant %in% pah_names,3,
+                          ifelse(Contaminant %in% pcb_names,4,
+                              ifelse(Contaminant %in% pesticide_names,
+                                     5,0)))))) %>%
+  mutate(cgroup = factor(cgroup, labels = c('Sediment', 'Metals', 'PAHs',
+                                         'PCBs', 'Pesticides')))  %>% 
+  mutate(Contaminant = fct_reorder(Contaminant, as.numeric(cgroup)))
+
+levels(sed_data_long$Contaminant)
+```
+
+### A Check for Half Censored Observations
+Since in a few cases, we averaged two samples together, it is possible that we
+have averaged a non-detect with a detection.  It turns out we did, but just
+once.
+```{r check_half_censored}
+sum(sed_data_long$censored> 0 & sed_data_long$censored<sed_data_long$samples)
+
+sed_data_long[which(sed_data_long$censored> 0 &
+                      sed_data_long$censored<sed_data_long$samples),]
+
+the_data[the_data$SAMPLE_ID=='CSS-15' & the_data$PARAMETER_NAME=="4,4'-DDT",]
+```
+Note that these two DDT results were flagged as problematic because differences
+between the two observations were greater than an acceptable relative percent
+difference. That does not engender great confidence in the data....
+
+We have to pick this up again later, when we calculate values for Pesticide
+Totals.
+
+## Assemble Data with Maximum Likelihood Estimates of Non-detects
+Here we replace non-detect with estimates of the conditional mean of
+non-detects, based on a maximum likelihood procedure under a longnormal
+distribution.
+
+### PAHs
+```{r pah_nds}
+pah_res<- sed_data_long %>%
+  filter (cgroup =='PAHs') %>%
+
+  mutate(censored = censored>0) %>%
+
+  group_by(Contaminant) %>%
+  mutate(LikCensored = sub_cmeans(CONCENTRATION, censored)) %>%
+  ungroup()  %>%
+  group_by(SAMPLE_ID) %>%
+  summarize(LNtotPAH = sum(LikCensored),
+            .groups = 'drop')
+```
+
+### PCBs
+```{r pcb_nds}
+pcb_res<- sed_data_long %>%
+  filter (cgroup =='PCBs') %>%
+  
+  # CSP-8 had exceptionally high PCB detection limits
+  filter(SAMPLE_ID != 'CSP-8') %>% 
+  
+  mutate(censored = censored>0) %>%
+
+  group_by(Contaminant) %>%
+  mutate(LikCensored = sub_cmeans(CONCENTRATION, censored)) %>%
+  ungroup()  %>%
+  group_by(SAMPLE_ID) %>%
+  summarize(LNtotPCB = sum(LikCensored),
+            .groups = 'drop')
+```
+
+### DDT Residues
+We report only on Total DDT Residues.  Other pesticides were observed too rarely
+to be worth reporting.
+
+#### Correcting for Half non-detect
+When we average across the two values, we are averaging a non-detect with a
+significantly higher observation.  This only happened once in these data, in the
+DDT results for Sample CSS-15.
+
+To be accurate, we need to calculate estimates of the censored values (ND, Half
+ND and Maximum Likelihood) on the original raw data and average the results,
+rather than calculate estimates based on an average of an observation and a
+reporting limit.
+
+If we are looking at the full detection limit, the average of a sum is
+the sum of the averages, and it makes no difference, but it should matter for
+the other two estimators, especially for the maximum likelihood estimator.
+
+#### Calculate Average by Maximum Likelihood Estimator
+```{r mean_mle}
+est <- the_data %>%
+  filter(PARAMETER_NAME=="4,4'-DDT") %>%
+  filter(is.na(`%_RECOVERY`)) %>%
+  filter(SAMPLE_ID != 'QC') %>%
+  select(SAMPLE_ID, CONCENTRATION, REPORTING_LIMIT, LAB_QUALIFIER) %>%
+  mutate(censored = LAB_QUALIFIER %in% c('U', 'J')) %>%
+  mutate(CONCENTRATION = ifelse(censored, REPORTING_LIMIT, CONCENTRATION)) %>%
+  mutate(lnest = sub_cmeans(CONCENTRATION, censored)) %>%
+  filter(SAMPLE_ID == 'CSS-15') %>%
+  pull(lnest)
+(mle <- mean(est))
+rm(est)
+```
+#### Assemble Pesticides Data
+```{r pesticides_nds}
+pests_data_long <- sed_data_long %>%
+  filter (cgroup =='Pesticides') %>%
+  mutate(censored = censored>0) %>%
+  group_by(Contaminant) %>%
+  mutate(LikCensored = sub_cmeans(CONCENTRATION, censored)) %>%
+  ungroup() %>%
+  mutate(LikCensored = ifelse(SAMPLE_ID =='CSS-15' & Contaminant =="4,4'-DDT",
+                              mle, LikCensored))
+rm(mle)
+```
+
+#### Assemble Final DDT Residue Data
+```{r correct_ddt}
+pesticide_res <- pests_data_long %>%
+  group_by(SAMPLE_ID) %>%
+  summarize(LNtotDDT = sum(LikCensored),
+            .groups = 'drop')
+```
+
+# Organic Contaminants
+## Combine Data
+```{r data_for_plotting}
+res <- site_info %>%
+  left_join(pah_res,       by = "SAMPLE_ID") %>%
+  left_join(pcb_res,       by = "SAMPLE_ID") %>%
+  left_join(pesticide_res, by = "SAMPLE_ID") %>%
+  
+  rename_at(3:5, ~substr(.,nchar(.)-2, nchar(.))) %>%  # Pull last characters
+  
+  pivot_longer(cols = -c(SAMPLE_ID, sitename),
+               names_to = 'Contaminant',
+               values_to= 'MLE') %>%
+  mutate(Contaminant = factor(Contaminant,
+                              levels = c('DDT', 'PAH', 'PCB'),
+                              labels = c('DDT Residues',
+                                         'Total PAHs',
+                                         'Total PCBs')))
+```
+
+# Cleanup
+```{r cleanup}
+rm(parmnames, sed_names, metal_names, pah_names, pah_res, pcb_names, pcb_res,
+   pesticide_names, pesticide_res, pests_data_long)
+rm(the_data)
+```
+
+## Build Screening Levels Tibble
+```{r screening_levels}
+pcb <- c(22.7, 180)
+pah <- c(4022, 44792)
+ddt <- c(1.58, 46.1)
+
+sl <- tibble(Contaminant = rep(c('DDT Residues', 
+                                 'Total PAHs', 'Total PCBs'), each = 2),    
+             Threshold = rep(c('ERL','ERM'),3),
+             Value = c(ddt,pah, pcb))
+```
+
+### Generate Screening Level Flags
+```{r screening_flags}
+erl <- sl %>% filter(Threshold == 'ERL') %>% select(-Threshold)
+erm <- sl %>% filter(Threshold == 'ERM') %>% select(-Threshold)
+res_screen <- res %>%
+  mutate(ERL = erl$Value[match(Contaminant, erl$Contaminant)]) %>%
+  mutate(ERM = erm$Value[match(Contaminant, erm$Contaminant)]) %>%
+  mutate(SL = ifelse(MLE<ERL, 'Below ERL',
+                     ifelse(MLE<ERM, 'Between ERL and ERM', 'Above ERM'))) %>%
+  mutate(SL = factor(SL, levels = c('Below ERL',
+                                     'Between ERL and ERM',
+                                     'Above ERM'))) %>%
+  select(-ERM, -ERL)
+```
+
+### A Wide Version for Export to GIS
+The function pivot_wider accepts two data columns, and handles them
+intelligently, but the default names are awkward here.  We use "rename_at only
+so we don't have to exactly match the default name by using "rename()".
+```{r export_for_GIS_1}
+res_screen_wide <- res_screen %>%
+  pivot_wider(names_from = Contaminant, values_from = c(MLE,SL),
+              id_cols = c(SAMPLE_ID, sitename)) %>%
+  rename_at(3:4, ~substr(.,nchar(.)-3, nchar(.))) %>%  # Pull last characters
+  rename_at(5, ~'DDTs') %>%
+  rename_at(6:7, ~paste0(substr(.,nchar(.)-3, nchar(.)), 'SL')) %>%
+  rename_at(8, ~'DDTsSL')
+write.csv(res_screen_wide,'MLE_Results_Wide.csv')
+
+res_screen <- res_screen %>%
+  filter(! is.na(MLE))
+```
+
+## Graphic Development
+
+```{r define_colors}
+# First line is not necessary, but we like to keep color formats consistent....
+fb <- rgb(t(col2rgb('firebrick')), maxColorValue = 255)
+tox_colors <- c(cbep_colors()[1:2], fb)
+na_color <- cbep_colors()[3]
+rm(fb)
+```
+
+### Draft
+```{r draft_graphic, fig.width = 6, fig.height=5}
+plt <- ggplot(res_screen, aes(Contaminant, MLE)) + 
+  #geom_boxplot() +
+  geom_point(aes(color = SL), size = 3, alpha = 0.5) +
+  # geom_point(data = sl, aes(Contaminant, Value,
+  #                               fill = Threshold, shape = Threshold),
+  #                size = 4, alpha = .5) +
+
+  scale_y_log10(labels=scales::comma) +
+  
+ #scale_shape_manual(values = c(24,25)) +
+  scale_color_manual(name = '', values = tox_colors) +
+  ylab('Concentration (ppb)') +
+  xlab ('') +
+  theme_cbep() +
+  #theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust=0.5, hjust=1)) 
+plt
+```
+
+So, what that shows is that despite DDT being outlawed for a generation,
+concentrations of DDT residues in Portland Harbor are well above levels of
+concern.  Similarly, PAHs are usually above conservative screening levels, and
+many sites had levels of PCBs above levels of concern.
+
+### Reorder Factors
+```{r}
+tmp <- res_screen %>%
+  mutate(Contaminant = fct_relevel(Contaminant, 'Total PAHs', 'Total PCBs'))
+levels(tmp$Contaminant)
+
+tmp_sl <- sl %>%
+   mutate(Contaminant = fct_relevel(Contaminant, 'Total PAHs', 'Total PCBs'))
+```
+
+### Principal Graphic
+```{r final_graphic, fig.width = 6, fig.height=5}
+plt <- ggplot(tmp, aes(Contaminant, MLE)) + 
+  geom_point(aes(color = SL), size = 4, alpha = 0.5) +
+  scale_y_log10(labels=scales::comma) +
+  scale_color_manual(name = '', values = tox_colors) +
+  #scale_color_viridis_d(begin=0, end=0.9, name = '') +  # The "end" parameter cuts out a very pale yellow.
+  ylab('Concentration (ppb)') +
+  xlab ('') +
+  theme_cbep() +
+  theme(axis.text.x = element_text(angle = 90, vjust=0.5, hjust=1)) 
+plt
+#ggsave('figures/Portland Harbor Contaminants.png', type = 'cairo',
+#       width = 6, height = 5)
+ggsave('figures/Portland Harbor Contaminants.pdf', device = cairo_pdf,
+       width = 6, height = 5)
+```
+
+### Alternate Form Showing Correlated Levels
+```{r alternate_graphic, fig.width = 6, fig.height=5}
+plt + geom_line(aes(as.numeric(Contaminant), MLE,
+                    group = SAMPLE_ID), alpha = 0.2)
+```
+
+That might work in a powerpoint, but it's a bit noisy for SotB.
+
+## Number and Proportion of Exceedences For Possible Table
+```{r}
+res_screen %>%
+  group_by(Contaminant, SL) %>%
+  summarize(number = n(), .groups = 'drop_last') %>%
+  pivot_wider(Contaminant, names_from = SL, values_from = number) %>%
+  relocate(`Below ERL`, .after = Contaminant) %>%
+  rowwise() %>%
+  mutate(Total = sum(`Between ERL and ERM`, `Above ERM`,
+                     `Below ERL`, na.rm = TRUE)) %>%
+  ungroup() %>%
+  knitr::kable()
+  
+```
+
+# Metals
+We handle metals separately, because we have many different constituents that
+can not appropriately be summed to provide a sense of severity of local contamination.  Also, we have NO censored values, so we need not calculate
+estimated values for non-detects.
+
+## Select the data
+```{r metals_nds}
+metals_res<- sed_data_long %>%
+  filter (cgroup =='Metals') %>%
+  select(-censored) %>%
+  rename(Conc = CONCENTRATION) %>%
+  select(-samples, -cgroup)
+metals_res <- site_info %>%
+  left_join(metals_res)
+metals_res
+```
+
+## Incorporate Screening  Levels
+```{r load_screening_values}
+sibfldnm <- 'Derived_Data'
+parent <- dirname(getwd())
+sibling = file.path(parent, sibfldnm)
+
+fn= "Marine_Sediment_Screening_Values_simplified.xlsx"
+ SQUIRTS <- read_excel(file.path(sibling,fn)) %>%
+   select(1:8) %>%
+   filter(Chemical %in% unique(metals_res$Contaminant)) %>%
+   mutate(Chemical = factor(Chemical, 
+          levels = levels(metals_res$Contaminant))) %>%
+   mutate(across(T20:AET, ~ .x / 1000)) # Convert units from PPB to PPM
+```
+
+```{r screening_lookup_table}
+lookup <- SQUIRTS %>%
+  mutate(chemical = as.character(Chemical))
+metals_res <- metals_res %>%
+  mutate(chemical = as.character(Contaminant))
+metals_res <- metals_res %>%
+  left_join(lookup, by = 'chemical') %>%
+  select(-chemical) %>%
+  mutate(SL = factor(ifelse(is.na(ERL), 'N/A',
+                             ifelse(Conc <= ERL, 'Below ERL',
+                                   ifelse(Conc <= ERM,
+                                          'Between ERL and ERM','Above ERM'))),
+                      levels = c('Below ERL',
+                                 'Between ERL and ERM',
+                                 'Above ERM'))) %>%
+  select(-ERM, -ERL)
+
+rm(lookup)
+```
+
+
+### A Wide Version for Export to GIS
+The function pivot_wider accepts two data columns, and handles them
+intelligently, but the default names are awkward here.  We use "rename_at only
+so we don't have to exactly match the default name by using "rename()".
+```{r export_for_GIS_2}
+metals_res_wide <- metals_res %>%
+  pivot_wider(names_from = Contaminant, values_from = c(Conc,SL),
+              id_cols = c(SAMPLE_ID, sitename)) %>%
+  rename_at(3:4, ~substr(.,nchar(.)-3, nchar(.))) %>%  # Pull last characters
+  rename_at(5, ~'DDTs') %>%
+  rename_at(6:7, ~paste0(substr(.,nchar(.)-3, nchar(.)), 'SL')) %>%
+  rename_at(8, ~'DDTsSL')
+write.csv(metals_res_wide,'Metals_Results_Wide.csv')
+```
+
+# Reorder Metals Factor
+```{r}
+tmp <- metals_res %>%
+  mutate(Contaminant = factor(Contaminant),
+         Contaminant = fct_reorder(Contaminant, Conc, median))
+levels(tmp$Contaminant)
+```
+
+
+### Principal Graphic
+```{r metals_graphic, fig.width = 6, fig.height=5}
+plt <- ggplot(tmp, aes(Contaminant, Conc, color = SL)) + 
+  geom_point(size = 4, alpha = 0.5) +
+  
+  scale_y_log10(labels=scales::comma) +
+  scale_color_manual(name = '', values = tox_colors) +
+  ylab('Concentration (ppm)') +
+  xlab ('') +
+  theme_cbep() +
+  theme(axis.text.x = element_text(angle = 90, vjust=0.5, hjust=1)) 
+plt
+
+ggsave('figures/Portland Harbor Metals.pdf', device = cairo_pdf,
+       width = 6, height = 5)
+```
+
