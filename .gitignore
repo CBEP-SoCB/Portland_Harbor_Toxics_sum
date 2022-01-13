@@ -28,18 +28,6 @@
 # R Environment Variables
 .Renviron
 
-# Git hosts markdown directly, so do not want the .html version of support docs
-README.html
-Derived_Data/DATA_NOTES.html
-Original_Data/DATA_SOURCES.html
-
-/Related_References/
-/Earlier_Drafts_and_Exploratory_Code/
-
 # Folders used to hide content from GIT
 **/Methods/
 **/Drafts/
-**/omitfromgit/
-
-# Non-essential ArcGIS File
-**/GIS_Files.idb/
