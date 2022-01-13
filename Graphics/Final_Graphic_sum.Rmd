@@ -14,21 +14,47 @@ output:
   style="position:absolute;top:10px;right:50px;" />
 
 # Strategy
-Overall, we want a visually simple graphic that captures the most important aspects of contamination in Portland Harbor.  From other analyses, we know that 
+Overall, we want a visually simple graphic that captures the most important 
+aspects of contamination in Portland Harbor.  From other analyses, we know that 
+
 1.  Metals levels are consistently below screening levels.
-2.  Most pesticide residues were never or almost never detected, the only exceptions being the DDT residues.
-3.  Other contaminants exceed screening levels at about half of sampling locations.
+
+2.  Most pesticide residues were never or almost never detected, the only 
+    exceptions being the DDT residues.
+
+3.  Other contaminants exceed screening levels at about half of sampling 
+    locations.
+
 4.  Levels of contaminants are highly correlated.
 
-Multiple contaminants with complicated names can make for intimidating graphic.  We need to identify ways to simplify the data display without distorting the meaning.  Screening levels are available for Total PAHs, Total PCBs, and sum of DDT residues, suggesting we can focus on those three aggregate indicators of contamination and simplify the presentation.  There is no equivalent way of simplifying display of the metals data, but all metals are below levels of concern.
+Multiple contaminants with complicated names can make for intimidating graphic.
+We need to identify ways to simplify the data display without distorting the
+meaning.  Screening levels are available for Total PAHs, Total PCBs, and sum of
+DDT residues, suggesting we can focus on those three aggregate indicators of
+contamination and simplify the presentation.  There is no equivalent way of
+simplifying display of the metals data, but all metals are below levels of
+concern.
 
-The data is complicated by the presence of many non-detects.  Here, we handle non-detects by replacing them with a maximum likelihood estimator of the expected value of non-detects based on an (assumed) lognormal distribution.  See CBEP's LCensMeans Package for details.
+The data is complicated by the presence of many non-detects.  Here, we handle
+non-detects by replacing them with a maximum likelihood estimator of the
+expected value of non-detects based on an (assumed) lognormal distribution. See
+CBEP's LCensMeans Package for details.
 
-Here we consider both and 'J' flags to be "non-detects' as both are below the reporting limits.  A more sophisticated analysis, with more data might model 'J' and 'U' flags differently, but here we combine them.
+Here we consider both 'U' and 'J' flags to be "non-detects' as both are below 
+the reporting limits.  A more sophisticated analysis, with more data might 
+model 'J' and 'U' flags differently, but here we combine them.
 
-## Special Considerations
-1.  Reporting limits for organic contaminants from sample CSP-8 were exceptionally high.  For PCBs the reporting limit was sufficiently high to bias any approach to estimating PCB loads, so we delete this point from consideration
-2. DDT concentrations from Sample CSS-15 were replicates that failed a QA/QC check.  One was a non-detect, while the other was roughly double the reporting limit.  Here we report results based on averaging imputed values of the non-detect with the observed value from the other sample.
+## Special Considerations  
+
+1.  Reporting limits for organic contaminants from sample CSP-8 were
+    exceptionally high.  For PCBs the reporting limit was sufficiently high to 
+    bias any approach to estimating PCB loads, so we delete this point from 
+    consideration
+
+2.  DDT concentrations from Sample CSS-15 were replicates that failed a QA/QC 
+    check.  One was a non-detect, while the other was roughly double the 
+    reporting limit.  Here we report results based on averaging imputed values 
+    of the non-detect with the observed value from the other sample.
 
 # Install Libraries
 ```{r libraries}
@@ -67,10 +93,9 @@ rm(SAMPLE_ID, sitename)
 
 ## Folder References
 ```{r folders}
-sibfldnm <- 'Original_Data'
-niecefldnm <- 'Final_Data_Transmittal'
+sibfldnm <- 'Data'
 parent <- dirname(getwd())
-niece = file.path(parent,sibfldnm, niecefldnm)
+sibling <- file.path(parent,sibfldnm)
 
 dir.create(file.path(getwd(), 'figures'), showWarnings = FALSE)
 ```
@@ -79,33 +104,34 @@ dir.create(file.path(getwd(), 'figures'), showWarnings = FALSE)
 We need lists of names of parameters is specific categories to facilitate later
 sums, totals, and graphics.  The Parameters are grouped in categories in the 
 secondary tables in the source Excel data.
+
 ```{r parameter_names}
-fn <- "draft_Combined_data_20190917.xls"
+fn <- "working_data.xls"
 
 sed_names <- c('% COARSE SAND', '% FINE SAND', '% MEDIUM SAND',
                 'FINES', 'GRAVEL', 'MOISTURE', 'SOLIDS, TOTAL',
                 'TOTAL ORGANIC CARBON (REP1)', 'TOTAL ORGANIC CARBON (REP2)')
 
-metal_names <- read_excel(paste(niece,fn, sep='/'),
+metal_names <- read_excel(file.path(sibling,fn),
                            sheet = "Metals", skip = 3) %>%
   select(1) %>%
   slice(1:8) %>%
   mutate(PARAMETER_NAME = substr(PARAMETER_NAME, 1, nchar(PARAMETER_NAME)-7))
 metal_names <- metal_names$PARAMETER_NAME
 
-pah_names <- read_excel(paste(niece,fn, sep='/'),
+pah_names <- read_excel(file.path(sibling,fn),
                         sheet = "PAHs", skip = 3) %>%
   select(1) %>%
   slice(1:16)
 pah_names <- pah_names$PARAMETER_NAME
 
-pcb_names <- read_excel(paste(niece,fn, sep='/'),
+pcb_names <- read_excel(file.path(sibling,fn),
                         sheet = "PCBs", skip = 3) %>%
   select(1) %>%
   slice(1:22) #%>%
 pcb_names <- pcb_names$PARAMETER_NAME
 
-pesticide_names <- read_excel(paste(niece,fn, sep='/'),
+pesticide_names <- read_excel(file.path(sibling,fn),
                                sheet = "Pesticides", skip = 3) %>%
   select(1) %>%
   slice(1:8)
@@ -117,9 +143,7 @@ pesticide_names <- pesticide_names$PARAMETER_NAME
 
 ## Load Core Data
 ```{r load_data}
-fn <- "draft_Combined_data_20190917.xls"
-
-the_data <- read_excel(paste(niece,fn, sep='/'), 
+the_data <- read_excel(file.path(sibling,fn), 
     sheet = "Combined", col_types = c("skip", 
         "text", "skip", "skip", "skip", 
         "skip", "skip", "skip", "skip", 
@@ -149,6 +173,7 @@ We filter data to eliminate QA/QC samples, then combine Reporting Limits and
 Observed Concentrations into data on concentrations. We then add a flag
 indicating which are censored values.  Finally, we group data into groups, and
 use the groups.
+
 ```{r format_data_for_nd}
 sed_data_long <- the_data %>% 
   filter (the_data$PARAMETER_NAME %in% parmnames) %>%
@@ -161,7 +186,8 @@ sed_data_long <- the_data %>%
   group_by(SAMPLE_ID, PARAMETER_NAME) %>%
   summarize(CONCENTRATION = mean(CONCENTRATION, na.rm=TRUE),
             samples = n(),
-            censored = sum(LAB_QUALIFIER=='U', na.rm=TRUE)) %>%
+            censored = sum(LAB_QUALIFIER=='U', na.rm=TRUE),
+            .groups = 'drop') %>%
   ungroup() %>%
   rename(Contaminant = PARAMETER_NAME) %>%
   mutate(Contaminant = factor(Contaminant)) %>%
@@ -184,6 +210,7 @@ levels(sed_data_long$Contaminant)
 Since in a few cases, we averaged two samples together, it is possible that we
 have averaged a non-detect with a detection.  It turns out we did, but just
 once.
+
 ```{r check_half_censored}
 sum(sed_data_long$censored> 0 & sed_data_long$censored<sed_data_long$samples)
 
@@ -192,11 +219,12 @@ sed_data_long[which(sed_data_long$censored> 0 &
 
 the_data[the_data$SAMPLE_ID=='CSS-15' & the_data$PARAMETER_NAME=="4,4'-DDT",]
 ```
+
 Note that these two DDT results were flagged as problematic because differences
 between the two observations were greater than an acceptable relative percent
 difference. That does not engender great confidence in the data....
 
-We have to pick this up again later, when we calculate values for Pesticide
+We pick this up again later, when we calculate values for Pesticide
 Totals.
 
 ## Assemble Data with Maximum Likelihood Estimates of Non-detects
@@ -256,6 +284,7 @@ the sum of the averages, and it makes no difference, but it should matter for
 the other two estimators, especially for the maximum likelihood estimator.
 
 #### Calculate Average by Maximum Likelihood Estimator
+We will use this result in the next step.
 ```{r mean_mle}
 est <- the_data %>%
   filter(PARAMETER_NAME=="4,4'-DDT") %>%
@@ -349,6 +378,7 @@ res_screen <- res %>%
 The function pivot_wider accepts two data columns, and handles them
 intelligently, but the default names are awkward here.  We use "rename_at only
 so we don't have to exactly match the default name by using "rename()".
+
 ```{r export_for_GIS_1}
 res_screen_wide <- res_screen %>%
   pivot_wider(names_from = Contaminant, values_from = c(MLE,SL),
@@ -364,7 +394,6 @@ res_screen <- res_screen %>%
 ```
 
 ## Graphic Development
-
 ```{r define_colors}
 # First line is not necessary, but we like to keep color formats consistent....
 fb <- rgb(t(col2rgb('firebrick')), maxColorValue = 255)
@@ -373,38 +402,10 @@ na_color <- cbep_colors()[3]
 rm(fb)
 ```
 
-### Draft
-```{r draft_graphic, fig.width = 6, fig.height=5}
-plt <- ggplot(res_screen, aes(Contaminant, MLE)) + 
-  #geom_boxplot() +
-  geom_point(aes(color = SL), size = 3, alpha = 0.5) +
-  # geom_point(data = sl, aes(Contaminant, Value,
-  #                               fill = Threshold, shape = Threshold),
-  #                size = 4, alpha = .5) +
-
-  scale_y_log10(labels=scales::comma) +
-  
- #scale_shape_manual(values = c(24,25)) +
-  scale_color_manual(name = '', values = tox_colors) +
-  ylab('Concentration (ppb)') +
-  xlab ('') +
-  theme_cbep() +
-  #theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, vjust=0.5, hjust=1)) 
-plt
-```
-
-So, what that shows is that despite DDT being outlawed for a generation,
-concentrations of DDT residues in Portland Harbor are well above levels of
-concern.  Similarly, PAHs are usually above conservative screening levels, and
-many sites had levels of PCBs above levels of concern.
-
 ### Reorder Factors
 ```{r}
 tmp <- res_screen %>%
   mutate(Contaminant = fct_relevel(Contaminant, 'Total PAHs', 'Total PCBs'))
-levels(tmp$Contaminant)
-
 tmp_sl <- sl %>%
    mutate(Contaminant = fct_relevel(Contaminant, 'Total PAHs', 'Total PCBs'))
 ```
@@ -421,8 +422,6 @@ plt <- ggplot(tmp, aes(Contaminant, MLE)) +
   theme_cbep() +
   theme(axis.text.x = element_text(angle = 90, vjust=0.5, hjust=1)) 
 plt
-#ggsave('figures/Portland Harbor Contaminants.png', type = 'cairo',
-#       width = 6, height = 5)
 ggsave('figures/Portland Harbor Contaminants.pdf', device = cairo_pdf,
        width = 6, height = 5)
 ```
@@ -432,8 +431,6 @@ ggsave('figures/Portland Harbor Contaminants.pdf', device = cairo_pdf,
 plt + geom_line(aes(as.numeric(Contaminant), MLE,
                     group = SAMPLE_ID), alpha = 0.2)
 ```
-
-That might work in a powerpoint, but it's a bit noisy for SotB.
 
 ## Number and Proportion of Exceedences For Possible Table
 ```{r}
@@ -452,7 +449,8 @@ res_screen %>%
 
 # Metals
 We handle metals separately, because we have many different constituents that
-can not appropriately be summed to provide a sense of severity of local contamination.  Also, we have NO censored values, so we need not calculate
+can not appropriately be summed to provide a sense of severity of local 
+contamination.  Also, we have NO censored values, so we need not calculate
 estimated values for non-detects.
 
 ## Select the data
@@ -464,12 +462,11 @@ metals_res<- sed_data_long %>%
   select(-samples, -cgroup)
 metals_res <- site_info %>%
   left_join(metals_res)
-metals_res
 ```
 
 ## Incorporate Screening  Levels
 ```{r load_screening_values}
-sibfldnm <- 'Derived_Data'
+sibfldnm <- 'Data'
 parent <- dirname(getwd())
 sibling = file.path(parent, sibfldnm)
 
@@ -498,15 +495,14 @@ metals_res <- metals_res %>%
                                  'Between ERL and ERM',
                                  'Above ERM'))) %>%
   select(-ERM, -ERL)
-
 rm(lookup)
 ```
-
 
 ### A Wide Version for Export to GIS
 The function pivot_wider accepts two data columns, and handles them
 intelligently, but the default names are awkward here.  We use "rename_at only
 so we don't have to exactly match the default name by using "rename()".
+
 ```{r export_for_GIS_2}
 metals_res_wide <- metals_res %>%
   pivot_wider(names_from = Contaminant, values_from = c(Conc,SL),
@@ -525,7 +521,6 @@ tmp <- metals_res %>%
          Contaminant = fct_reorder(Contaminant, Conc, median))
 levels(tmp$Contaminant)
 ```
-
 
 ### Principal Graphic
 ```{r metals_graphic, fig.width = 6, fig.height=5}

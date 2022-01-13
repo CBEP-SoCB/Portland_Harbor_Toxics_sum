@@ -572,13 +572,13 @@ est <- the.data %>%
 est
 ```
 
-    ## [1] 0.7440000 0.1425809
+    ## [1] 0.7440000 0.1425021
 
 ``` r
 mean(est)
 ```
 
-    ## [1] 0.4432905
+    ## [1] 0.4432511
 
 Second, the simple way, by calculating estimates based on average value.
 
@@ -591,6 +591,6 @@ Pesticides.data.long %>%
   pull(lnest)
 ```
 
-    ## [1] 0.1968239
+    ## [1] 0.2005332
 
 So, this makes a big difference for our ML estimate, as suspected..

@@ -29,7 +29,6 @@ Curtis C. Bohlen, Casco Bay Estuary Partnership
         -   [A Wide Version for Export to
             GIS](#a-wide-version-for-export-to-gis)
     -   [Graphic Development](#graphic-development)
-        -   [Draft](#draft)
         -   [Reorder Factors](#reorder-factors)
         -   [Principal Graphic](#principal-graphic)
         -   [Alternate Form Showing Correlated
@@ -52,11 +51,17 @@ Curtis C. Bohlen, Casco Bay Estuary Partnership
 
 Overall, we want a visually simple graphic that captures the most
 important aspects of contamination in Portland Harbor. From other
-analyses, we know that 1. Metals levels are consistently below screening
-levels. 2. Most pesticide residues were never or almost never detected,
-the only exceptions being the DDT residues. 3. Other contaminants exceed
-screening levels at about half of sampling locations. 4. Levels of
-contaminants are highly correlated.
+analyses, we know that
+
+1.  Metals levels are consistently below screening levels.
+
+2.  Most pesticide residues were never or almost never detected, the
+    only exceptions being the DDT residues.
+
+3.  Other contaminants exceed screening levels at about half of sampling
+    locations.
+
+4.  Levels of contaminants are highly correlated.
 
 Multiple contaminants with complicated names can make for intimidating
 graphic. We need to identify ways to simplify the data display without
@@ -71,7 +76,7 @@ handle non-detects by replacing them with a maximum likelihood estimator
 of the expected value of non-detects based on an (assumed) lognormal
 distribution. See CBEP’s LCensMeans Package for details.
 
-Here we consider both and ‘J’ flags to be "non-detects’ as both are
+Here we consider both ‘U’ and ‘J’ flags to be "non-detects’ as both are
 below the reporting limits. A more sophisticated analysis, with more
 data might model ‘J’ and ‘U’ flags differently, but here we combine
 them.
@@ -82,6 +87,7 @@ them.
     exceptionally high. For PCBs the reporting limit was sufficiently
     high to bias any approach to estimating PCB loads, so we delete this
     point from consideration
+
 2.  DDT concentrations from Sample CSS-15 were replicates that failed a
     QA/QC check. One was a non-detect, while the other was roughly
     double the reporting limit. Here we report results based on
@@ -95,20 +101,12 @@ library(readxl)
 library(tidyverse)
 ```
 
-    ## Warning: package 'tidyverse' was built under R version 4.0.5
-
     ## -- Attaching packages --------------------------------------- tidyverse 1.3.1 --
 
-    ## v ggplot2 3.3.3     v purrr   0.3.4
-    ## v tibble  3.1.2     v dplyr   1.0.6
-    ## v tidyr   1.1.3     v stringr 1.4.0
-    ## v readr   1.4.0     v forcats 0.5.1
-
-    ## Warning: package 'tidyr' was built under R version 4.0.5
-
-    ## Warning: package 'dplyr' was built under R version 4.0.5
-
-    ## Warning: package 'forcats' was built under R version 4.0.5
+    ## v ggplot2 3.3.5     v purrr   0.3.4
+    ## v tibble  3.1.6     v dplyr   1.0.7
+    ## v tidyr   1.1.4     v stringr 1.4.0
+    ## v readr   2.1.1     v forcats 0.5.1
 
     ## -- Conflicts ------------------------------------------ tidyverse_conflicts() --
     ## x dplyr::filter() masks stats::filter()
@@ -116,15 +114,8 @@ library(tidyverse)
 
 ``` r
 library(ggthemes)
-```
-
-    ## Warning: package 'ggthemes' was built under R version 4.0.5
-
-``` r
 library(GGally)
 ```
-
-    ## Warning: package 'GGally' was built under R version 4.0.5
 
     ## Registered S3 method overwritten by 'GGally':
     ##   method from   
@@ -133,8 +124,6 @@ library(GGally)
 ``` r
 library(maxLik)
 ```
-
-    ## Warning: package 'maxLik' was built under R version 4.0.5
 
     ## Loading required package: miscTools
 
@@ -178,10 +167,9 @@ rm(SAMPLE_ID, sitename)
 ## Folder References
 
 ``` r
-sibfldnm <- 'Original_Data'
-niecefldnm <- 'Final_Data_Transmittal'
+sibfldnm <- 'Data'
 parent <- dirname(getwd())
-niece = file.path(parent,sibfldnm, niecefldnm)
+sibling <- file.path(parent,sibfldnm)
 
 dir.create(file.path(getwd(), 'figures'), showWarnings = FALSE)
 ```
@@ -193,13 +181,13 @@ facilitate later sums, totals, and graphics. The Parameters are grouped
 in categories in the secondary tables in the source Excel data.
 
 ``` r
-fn <- "draft_Combined_data_20190917.xls"
+fn <- "working_data.xls"
 
 sed_names <- c('% COARSE SAND', '% FINE SAND', '% MEDIUM SAND',
                 'FINES', 'GRAVEL', 'MOISTURE', 'SOLIDS, TOTAL',
                 'TOTAL ORGANIC CARBON (REP1)', 'TOTAL ORGANIC CARBON (REP2)')
 
-metal_names <- read_excel(paste(niece,fn, sep='/'),
+metal_names <- read_excel(file.path(sibling,fn),
                            sheet = "Metals", skip = 3) %>%
   select(1) %>%
   slice(1:8) %>%
@@ -217,7 +205,7 @@ metal_names <- read_excel(paste(niece,fn, sep='/'),
 ``` r
 metal_names <- metal_names$PARAMETER_NAME
 
-pah_names <- read_excel(paste(niece,fn, sep='/'),
+pah_names <- read_excel(file.path(sibling,fn),
                         sheet = "PAHs", skip = 3) %>%
   select(1) %>%
   slice(1:16)
@@ -234,7 +222,7 @@ pah_names <- read_excel(paste(niece,fn, sep='/'),
 ``` r
 pah_names <- pah_names$PARAMETER_NAME
 
-pcb_names <- read_excel(paste(niece,fn, sep='/'),
+pcb_names <- read_excel(file.path(sibling,fn),
                         sheet = "PCBs", skip = 3) %>%
   select(1) %>%
   slice(1:22) #%>%
@@ -251,7 +239,7 @@ pcb_names <- read_excel(paste(niece,fn, sep='/'),
 ``` r
 pcb_names <- pcb_names$PARAMETER_NAME
 
-pesticide_names <- read_excel(paste(niece,fn, sep='/'),
+pesticide_names <- read_excel(file.path(sibling,fn),
                                sheet = "Pesticides", skip = 3) %>%
   select(1) %>%
   slice(1:8)
@@ -307,9 +295,7 @@ pesticide_names <- pesticide_names$PARAMETER_NAME
 ## Load Core Data
 
 ``` r
-fn <- "draft_Combined_data_20190917.xls"
-
-the_data <- read_excel(paste(niece,fn, sep='/'), 
+the_data <- read_excel(file.path(sibling,fn), 
     sheet = "Combined", col_types = c("skip", 
         "text", "skip", "skip", "skip", 
         "skip", "skip", "skip", "skip", 
@@ -353,7 +339,8 @@ sed_data_long <- the_data %>%
   group_by(SAMPLE_ID, PARAMETER_NAME) %>%
   summarize(CONCENTRATION = mean(CONCENTRATION, na.rm=TRUE),
             samples = n(),
-            censored = sum(LAB_QUALIFIER=='U', na.rm=TRUE)) %>%
+            censored = sum(LAB_QUALIFIER=='U', na.rm=TRUE),
+            .groups = 'drop') %>%
   ungroup() %>%
   rename(Contaminant = PARAMETER_NAME) %>%
   mutate(Contaminant = factor(Contaminant)) %>%
@@ -368,11 +355,7 @@ sed_data_long <- the_data %>%
   mutate(cgroup = factor(cgroup, labels = c('Sediment', 'Metals', 'PAHs',
                                          'PCBs', 'Pesticides')))  %>% 
   mutate(Contaminant = fct_reorder(Contaminant, as.numeric(cgroup)))
-```
 
-    ## `summarise()` has grouped output by 'SAMPLE_ID'. You can override using the `.groups` argument.
-
-``` r
 levels(sed_data_long$Contaminant)
 ```
 
@@ -453,8 +436,8 @@ differences between the two observations were greater than an acceptable
 relative percent difference. That does not engender great confidence in
 the data….
 
-We have to pick this up again later, when we calculate values for
-Pesticide Totals.
+We pick this up again later, when we calculate values for Pesticide
+Totals.
 
 ## Assemble Data with Maximum Likelihood Estimates of Non-detects
 
@@ -520,6 +503,8 @@ likelihood estimator.
 
 #### Calculate Average by Maximum Likelihood Estimator
 
+We will use this result in the next step.
+
 ``` r
 est <- the_data %>%
   filter(PARAMETER_NAME=="4,4'-DDT") %>%
@@ -534,7 +519,7 @@ est <- the_data %>%
 (mle <- mean(est))
 ```
 
-    ## [1] 0.4467067
+    ## [1] 0.446288
 
 ``` r
 rm(est)
@@ -653,46 +638,11 @@ na_color <- cbep_colors()[3]
 rm(fb)
 ```
 
-### Draft
-
-``` r
-plt <- ggplot(res_screen, aes(Contaminant, MLE)) + 
-  #geom_boxplot() +
-  geom_point(aes(color = SL), size = 3, alpha = 0.5) +
-  # geom_point(data = sl, aes(Contaminant, Value,
-  #                               fill = Threshold, shape = Threshold),
-  #                size = 4, alpha = .5) +
-
-  scale_y_log10(labels=scales::comma) +
-  
- #scale_shape_manual(values = c(24,25)) +
-  scale_color_manual(name = '', values = tox_colors) +
-  ylab('Concentration (ppb)') +
-  xlab ('') +
-  theme_cbep() +
-  #theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, vjust=0.5, hjust=1)) 
-plt
-```
-
-![](Final_Graphic_3_files/figure-gfm/draft_graphic-1.png)<!-- -->
-
-So, what that shows is that despite DDT being outlawed for a generation,
-concentrations of DDT residues in Portland Harbor are well above levels
-of concern. Similarly, PAHs are usually above conservative screening
-levels, and many sites had levels of PCBs above levels of concern.
-
 ### Reorder Factors
 
 ``` r
 tmp <- res_screen %>%
   mutate(Contaminant = fct_relevel(Contaminant, 'Total PAHs', 'Total PCBs'))
-levels(tmp$Contaminant)
-```
-
-    ## [1] "Total PAHs"   "Total PCBs"   "DDT Residues"
-
-``` r
 tmp_sl <- sl %>%
    mutate(Contaminant = fct_relevel(Contaminant, 'Total PAHs', 'Total PCBs'))
 ```
@@ -712,11 +662,9 @@ plt <- ggplot(tmp, aes(Contaminant, MLE)) +
 plt
 ```
 
-![](Final_Graphic_3_files/figure-gfm/final_graphic-1.png)<!-- -->
+![](Final_Graphic_sum_files/figure-gfm/final_graphic-1.png)<!-- -->
 
 ``` r
-#ggsave('figures/Portland Harbor Contaminants.png', type = 'cairo',
-#       width = 6, height = 5)
 ggsave('figures/Portland Harbor Contaminants.pdf', device = cairo_pdf,
        width = 6, height = 5)
 ```
@@ -728,9 +676,7 @@ plt + geom_line(aes(as.numeric(Contaminant), MLE,
                     group = SAMPLE_ID), alpha = 0.2)
 ```
 
-![](Final_Graphic_3_files/figure-gfm/alternate_graphic-1.png)<!-- -->
-
-That might work in a powerpoint, but it’s a bit noisy for SotB.
+![](Final_Graphic_sum_files/figure-gfm/alternate_graphic-1.png)<!-- -->
 
 ## Number and Proportion of Exceedences For Possible Table
 
@@ -774,29 +720,10 @@ metals_res <- site_info %>%
 
     ## Joining, by = "SAMPLE_ID"
 
-``` r
-metals_res
-```
-
-    ## # A tibble: 128 x 4
-    ##    SAMPLE_ID sitename       Contaminant   Conc
-    ##    <chr>     <chr>          <fct>        <dbl>
-    ##  1 CSP-1     East End Beach ARSENIC      7.32 
-    ##  2 CSP-1     East End Beach CADMIUM      0.151
-    ##  3 CSP-1     East End Beach CHROMIUM    25.6  
-    ##  4 CSP-1     East End Beach COPPER       7.34 
-    ##  5 CSP-1     East End Beach LEAD         6.08 
-    ##  6 CSP-1     East End Beach MERCURY      0.015
-    ##  7 CSP-1     East End Beach NICKEL      15.2  
-    ##  8 CSP-1     East End Beach ZINC        35.7  
-    ##  9 CSP-2     Amethyst Lot   ARSENIC      7.44 
-    ## 10 CSP-2     Amethyst Lot   CADMIUM      0.496
-    ## # ... with 118 more rows
-
 ## Incorporate Screening Levels
 
 ``` r
-sibfldnm <- 'Derived_Data'
+sibfldnm <- 'Data'
 parent <- dirname(getwd())
 sibling = file.path(parent, sibfldnm)
 
@@ -825,7 +752,6 @@ metals_res <- metals_res %>%
                                  'Between ERL and ERM',
                                  'Above ERM'))) %>%
   select(-ERM, -ERL)
-
 rm(lookup)
 ```
 
@@ -874,7 +800,7 @@ plt <- ggplot(tmp, aes(Contaminant, Conc, color = SL)) +
 plt
 ```
 
-![](Final_Graphic_3_files/figure-gfm/metals_graphic-1.png)<!-- -->
+![](Final_Graphic_sum_files/figure-gfm/metals_graphic-1.png)<!-- -->
 
 ``` r
 ggsave('figures/Portland Harbor Metals.pdf', device = cairo_pdf,
