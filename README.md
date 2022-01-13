@@ -30,7 +30,8 @@ ocean disposal, which risks substantial exposure of marine organisms to
 whatever contaminants are present in the sediments.
 
 As part of the design process, the Portland Harbor Commission requested a study
-looking at the concentration of toxic contaminants in Portland Harbor sediments. Specifically, they looked at the concentration of persistent organic 
+looking at the concentration of toxic contaminants in Portland Harbor sediments.
+Specifically, they looked at the concentration of persistent organic
 contaminants and metals in pairs of "deep" ( ~ 2 meter long) cores of mud from
 16 locations where dredging was planned.
 
